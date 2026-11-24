@@ -8,8 +8,8 @@
 ## 🌐 Live Deployments & Endpoints
 
 - **Frontend (Netlify Live App)**: [https://watch-buddy.netlify.app](https://watch-buddy.netlify.app) *(Configured with `netlify.toml` and `_redirects`)*
-- **Backend (Render)**: `https://your-watchbuddy-server.onrender.com` *(Node.js WebSocket Web Service)*
-- **Health Check Endpoint**: `https://your-watchbuddy-server.onrender.com/health`
+- **Backend (Render WebSocket Service)**: [https://watchbuddy-server.onrender.com](https://watchbuddy-server.onrender.com) *(Node.js WebSocket Web Service)*
+- **Health Check Endpoint**: [https://watchbuddy-server.onrender.com/health](https://watchbuddy-server.onrender.com/health)
 
 ---
 
@@ -286,7 +286,7 @@ npm test
    - **Start Command**: `npm start`
    - **Plan**: `Free`
    - **Health Check Path**: `/health` (Under Advanced)
-5. Deploy and copy your Render URL: `https://your-service.onrender.com`.
+5. Deploy and copy your Render URL: `https://watchbuddy-server.onrender.com`.
 
 ### Part 2: Deploy Frontend to Netlify
 1. Go to [app.netlify.com](https://app.netlify.com/) $\rightarrow$ **Add new site** $\rightarrow$ **Import an existing project**.
@@ -297,7 +297,7 @@ npm test
    - **Publish directory**: `dist`
 4. Add the Environment Variable:
    - **Key**: `VITE_BACKEND_URL`
-   - **Value**: `https://your-service.onrender.com` *(Your Render backend URL)*
+   - **Value**: `https://watchbuddy-server.onrender.com` *(Your Render backend URL)*
 5. Deploy site. Your app will be live at `https://watch-buddy.netlify.app`.
 
 ---
