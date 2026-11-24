@@ -72,6 +72,11 @@ export function VideoPlayer({
     }
 
     const state = event.data;
+    // When video enters playing state, dismiss any user gesture prompts
+    if (state === 1) {
+      setNeedsUserGesture(false);
+    }
+
     const playerTime =
       playerRef.current && typeof playerRef.current.getCurrentTime === 'function'
         ? playerRef.current.getCurrentTime()
@@ -100,6 +105,8 @@ export function VideoPlayer({
 
         try {
           playerRef.current = new window.YT.Player(containerRef.current, {
+            width: '100%',
+            height: '100%',
             videoId: videoId || 'dQw4w9WgXcQ',
             playerVars: {
               autoplay: 0,
@@ -108,6 +115,7 @@ export function VideoPlayer({
               modestbranding: 1,
               rel: 0,
               enablejsapi: 1,
+              playsinline: 1, // CRITICAL: Allows video to play inline on mobile iOS & Android
               origin: window.location.origin
             },
             events: {
@@ -124,16 +132,35 @@ export function VideoPlayer({
                   } catch (e) {}
                 }
 
-                // If room is playing, start playback
+                // If room is playing, try playback
                 if (playState === 'playing') {
                   try {
-                    const p = event.target.playVideo();
-                    if (p && typeof p.catch === 'function') {
-                      p.catch(() => setNeedsUserGesture(true));
+                    event.target.playVideo();
+                  } catch (err) {}
+
+                  // On mobile devices, check if browser autoplay policy blocked playback
+                  setTimeout(() => {
+                    if (!isMounted) return;
+                    try {
+                      const currentYtState = event.target.getPlayerState();
+                      // 1 = PLAYING, 3 = BUFFERING
+                      if (currentYtState !== 1 && currentYtState !== 3) {
+                        setNeedsUserGesture(true);
+                      }
+                    } catch (e) {
+                      setNeedsUserGesture(true);
                     }
-                  } catch (err) {
-                    setNeedsUserGesture(true);
-                  }
+                  }, 800);
+                } else {
+                  // If paused on initial load, cue video so mobile displays the real poster image
+                  try {
+                    if (typeof event.target.cueVideoById === 'function') {
+                      event.target.cueVideoById({
+                        videoId: videoId || 'dQw4w9WgXcQ',
+                        startSeconds: currentTime || 0
+                      });
+                    }
+                  } catch (e) {}
                 }
               },
               onStateChange: (event) => {
@@ -222,18 +249,22 @@ export function VideoPlayer({
       const currentUrl = typeof playerRef.current.getVideoUrl === 'function' ? playerRef.current.getVideoUrl() : '';
       if (!currentUrl.includes(videoId)) {
         markRemoteSync();
-        playerRef.current.loadVideoById({
-          videoId: videoId,
-          startSeconds: 0
-        });
-        if (playState === 'paused' && typeof playerRef.current.pauseVideo === 'function') {
-          playerRef.current.pauseVideo();
+        if (playState === 'paused' && typeof playerRef.current.cueVideoById === 'function') {
+          playerRef.current.cueVideoById({
+            videoId: videoId,
+            startSeconds: 0
+          });
+        } else {
+          playerRef.current.loadVideoById({
+            videoId: videoId,
+            startSeconds: 0
+          });
         }
       }
     } catch (e) {
       console.warn('Error loading video by ID:', e);
     }
-  }, [videoId, isReady, markRemoteSync]);
+  }, [videoId, isReady, playState, markRemoteSync]);
 
   // Handle Play/Pause synchronization from remote server
   useEffect(() => {
@@ -250,11 +281,19 @@ export function VideoPlayer({
           playerRef.current.seekTo(currentTime, true);
         }
         if (typeof playerRef.current.playVideo === 'function') {
-          const res = playerRef.current.playVideo();
-          if (res && typeof res.catch === 'function') {
-            res.catch(() => setNeedsUserGesture(true));
-          }
+          playerRef.current.playVideo();
         }
+
+        // On mobile, if playVideo fails to transition to PLAYING/BUFFERING within 800ms, prompt user gesture
+        setTimeout(() => {
+          if (!playerRef.current) return;
+          try {
+            const state = playerRef.current.getPlayerState();
+            if (state !== 1 && state !== 3 && playState === 'playing') {
+              setNeedsUserGesture(true);
+            }
+          } catch (e) {}
+        }, 800);
       } else if (playState === 'paused' && currentYtState === 1) {
         markRemoteSync();
         if (typeof playerRef.current.pauseVideo === 'function') {
@@ -309,30 +348,35 @@ export function VideoPlayer({
   // User gesture button to bypass browser autoplay restrictions
   const handleUserGestureStart = () => {
     setNeedsUserGesture(false);
-    if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
+    if (playerRef.current) {
       markRemoteSync();
       try {
-        playerRef.current.playVideo();
+        if (typeof currentTime === 'number' && currentTime > 0 && typeof playerRef.current.seekTo === 'function') {
+          playerRef.current.seekTo(currentTime, true);
+        }
+        if (typeof playerRef.current.playVideo === 'function') {
+          playerRef.current.playVideo();
+        }
       } catch (e) {}
     }
   };
 
   return (
-    <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black border border-[#303030] shadow-xl group">
-      <div ref={containerRef} className="w-full h-full min-h-[220px]" />
+    <div className="video-responsive-wrapper relative w-full aspect-video rounded-xl overflow-hidden bg-black border border-[#303030] shadow-xl group">
+      <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
       {/* Browser Autoplay / Audio Gesture Unblocker Banner */}
       {needsUserGesture && (
         <div
           onClick={handleUserGestureStart}
-          className="absolute inset-0 z-30 bg-black/80 flex flex-col items-center justify-center cursor-pointer p-4 text-center transition animate-fade-in"
+          className="absolute inset-0 z-30 bg-black/85 flex flex-col items-center justify-center cursor-pointer p-4 text-center transition animate-fade-in"
         >
-          <div className="w-16 h-16 rounded-full bg-[#FF0033] flex items-center justify-center text-white mb-3 shadow-lg shadow-[#FF0033]/30 hover:scale-105 transition">
+          <div className="w-16 h-16 rounded-full bg-[#FF0033] flex items-center justify-center text-white mb-3 shadow-lg shadow-[#FF0033]/30 hover:scale-105 active:scale-95 transition">
             <Play className="w-8 h-8 fill-current ml-1" />
           </div>
-          <h3 className="text-base font-bold text-white mb-1">Click to Watch & Listen</h3>
+          <h3 className="text-base font-bold text-white mb-1">Tap to Watch & Listen</h3>
           <p className="text-xs text-[#AAAAAA] max-w-xs">
-            Your browser requires a click to enable sound and video synchronization.
+            Mobile browsers require a tap to start video and synchronized audio.
           </p>
         </div>
       )}

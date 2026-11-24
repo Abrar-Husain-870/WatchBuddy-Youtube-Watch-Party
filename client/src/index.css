@@ -54,3 +54,20 @@ input[type=range]::-webkit-slider-runnable-track {
   background: #383838;
   border-radius: 2px;
 }
+
+/* Responsive YouTube iframe embed styling for mobile, tablet and desktop */
+.video-responsive-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #000000;
+}
+
+.video-responsive-wrapper iframe {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+}
