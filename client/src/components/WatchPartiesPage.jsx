@@ -448,13 +448,15 @@ export function WatchPartiesPage({
                 className="group bg-[#181818] border border-[#303030] hover:border-[#717171] rounded-xl overflow-hidden flex flex-col justify-between transition"
               >
                 {/* 16:9 Thumbnail */}
-                <div className="relative aspect-video w-full bg-[#212121] overflow-hidden">
+                <div className="relative aspect-video w-full bg-[#212121] overflow-hidden min-h-[140px]">
                   <img
-                    src={`https://img.youtube.com/vi/${party.videoId}/hqdefault.jpg`}
+                    src={`https://i.ytimg.com/vi/${party.videoId}/hqdefault.jpg`}
                     alt={party.title}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=640&h=360&fit=crop';
+                      e.target.onerror = null;
+                      e.target.src = `https://i.ytimg.com/vi/${party.videoId}/mqdefault.jpg`;
                     }}
                   />
                   <div className="absolute top-2 left-2 bg-black/80 px-2 py-0.5 rounded text-[10px] font-mono text-[#3EA6FF] font-bold">

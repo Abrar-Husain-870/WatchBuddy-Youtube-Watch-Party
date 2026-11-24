@@ -163,11 +163,13 @@ export function RoomModal({
               {currentEffectiveVideoId && (
                 <div className="p-2.5 rounded-xl bg-[#181818] border border-[#303030] flex items-center gap-3">
                   <img
-                    src={`https://img.youtube.com/vi/${currentEffectiveVideoId}/hqdefault.jpg`}
+                    src={`https://i.ytimg.com/vi/${currentEffectiveVideoId}/hqdefault.jpg`}
                     alt="Selected Video"
+                    referrerPolicy="no-referrer"
                     className="w-16 h-9 object-cover rounded-md bg-[#0F0F0F] flex-shrink-0"
                     onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=640&h=360&fit=crop';
+                      e.target.onerror = null;
+                      e.target.src = `https://i.ytimg.com/vi/${currentEffectiveVideoId}/mqdefault.jpg`;
                     }}
                   />
                   <div className="text-xs min-w-0">

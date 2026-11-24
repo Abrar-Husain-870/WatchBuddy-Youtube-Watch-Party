@@ -92,14 +92,14 @@ export function HomeDiscovery({
                 onClick={() => onSelectVideoForParty(video.id)}
               >
                 {/* 16:9 Thumbnail Container */}
-                <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-[#181818] border border-[#303030]/50 group-hover:border-[#555555] transition">
+                <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-[#212121] border border-[#303030]/50 group-hover:border-[#555555] transition min-h-[140px]">
                   <img
-                    src={`https://img.youtube.com/vi/${video.id}/hqdefault.jpg`}
+                    src={video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}
                     alt={video.title}
+                    referrerPolicy="no-referrer"
                     onError={(e) => {
-                      // Fallback to medium quality or generic background if HQ thumbnail isn't found
                       e.target.onerror = null;
-                      e.target.src = `https://img.youtube.com/vi/${video.id}/0.jpg`;
+                      e.target.src = `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`;
                     }}
                     className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                     loading="lazy"

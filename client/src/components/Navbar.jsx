@@ -236,12 +236,13 @@ export function Navbar({
                     className="px-3 py-2 hover:bg-[#272727] cursor-pointer flex items-center gap-3 transition"
                   >
                     <img
-                      src={`https://img.youtube.com/vi/${video.id}/hqdefault.jpg`}
+                      src={`https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}
                       alt={video.title}
+                      referrerPolicy="no-referrer"
                       className="w-12 h-7 object-cover rounded bg-[#0F0F0F] flex-shrink-0"
                       onError={(e) => {
-                        e.target.src =
-                          'https://images.unsplash.com/photo-1518770660439-4636190af475?w=640&h=360&fit=crop';
+                        e.target.onerror = null;
+                        e.target.src = `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`;
                       }}
                     />
                     <div className="min-w-0 flex-1">

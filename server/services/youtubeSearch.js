@@ -74,6 +74,9 @@ function searchYouTube(query, limit = 16) {
                     ?.channelThumbnailWithLinkRenderer?.thumbnail?.thumbnails?.[0]
                     ?.url ||
                   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&h=80&fit=crop';
+                const thumbnail =
+                  vr.thumbnail?.thumbnails?.slice(-1)[0]?.url ||
+                  `https://i.ytimg.com/vi/${vr.videoId}/hqdefault.jpg`;
                 const views =
                   vr.viewCountText?.simpleText ||
                   vr.shortViewCountText?.simpleText ||
@@ -87,6 +90,7 @@ function searchYouTube(query, limit = 16) {
                   title,
                   channel,
                   channelAvatar,
+                  thumbnail,
                   views,
                   uploaded,
                   duration,

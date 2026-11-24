@@ -363,6 +363,20 @@ export function VideoPlayer({
 
   return (
     <div className="video-responsive-wrapper relative w-full aspect-video rounded-xl overflow-hidden bg-black border border-[#303030] shadow-xl group">
+      {/* High-res Video Thumbnail Poster (Shows immediately on mobile before video plays or during tap-to-watch) */}
+      {videoId && (
+        <img
+          src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`}
+          alt="Video thumbnail"
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+          }}
+        />
+      )}
+
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
       {/* Browser Autoplay / Audio Gesture Unblocker Banner */}

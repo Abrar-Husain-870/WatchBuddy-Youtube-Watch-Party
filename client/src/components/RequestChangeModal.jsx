@@ -60,9 +60,14 @@ export function RequestChangeModal({
               {req.type === 'change_video' && req.details?.videoId ? (
                 <div className="flex items-center gap-3 bg-[#181818] p-2 rounded-lg border border-[#303030]">
                   <img
-                    src={`https://img.youtube.com/vi/${req.details.videoId}/hqdefault.jpg`}
+                    src={`https://i.ytimg.com/vi/${req.details.videoId}/hqdefault.jpg`}
                     alt="Suggested Thumbnail"
+                    referrerPolicy="no-referrer"
                     className="w-16 h-9 object-cover rounded"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = `https://i.ytimg.com/vi/${req.details.videoId}/mqdefault.jpg`;
+                    }}
                   />
                   <div className="text-xs min-w-0 flex-1">
                     <p className="text-[#AAAAAA]">Suggested Video:</p>
@@ -170,9 +175,14 @@ export function RequestChangeModal({
                   {previewId && (
                     <div className="flex items-center gap-3 p-2 rounded-lg bg-[#181818] border border-[#303030] mt-2">
                       <img
-                        src={`https://img.youtube.com/vi/${previewId}/hqdefault.jpg`}
+                        src={`https://i.ytimg.com/vi/${previewId}/hqdefault.jpg`}
                         alt="Preview"
+                        referrerPolicy="no-referrer"
                         className="w-20 h-12 object-cover rounded"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = `https://i.ytimg.com/vi/${previewId}/mqdefault.jpg`;
+                        }}
                       />
                       <div className="text-xs text-[#AAAAAA]">
                         <span className="text-[#2BAE66] font-medium">✓ Valid Video ID</span>

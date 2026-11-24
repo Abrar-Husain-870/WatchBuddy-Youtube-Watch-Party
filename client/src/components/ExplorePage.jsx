@@ -243,15 +243,16 @@ export function ExplorePage({
               className="group flex flex-col bg-[#181818]/60 hover:bg-[#181818] border border-transparent hover:border-[#303030] rounded-xl overflow-hidden transition-all duration-200"
             >
               {/* 16:9 Thumbnail Container */}
-              <div className="relative aspect-video w-full bg-[#212121] overflow-hidden rounded-t-xl">
+              <div className="relative aspect-video w-full bg-[#212121] overflow-hidden rounded-t-xl min-h-[140px]">
                 <img
-                  src={`https://img.youtube.com/vi/${video.id}/hqdefault.jpg`}
+                  src={video.thumbnail || `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`}
                   alt={video.title}
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   loading="lazy"
                   onError={(e) => {
-                    e.target.src =
-                      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=640&h=360&fit=crop';
+                    e.target.onerror = null;
+                    e.target.src = `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`;
                   }}
                 />
 
