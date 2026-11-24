@@ -35,25 +35,44 @@ export function WatchPartyLayout({
   };
 
   const handleControlsPlay = (time) => {
+    let exactTime = time;
     if (playerRefExternal.current) {
+      if (typeof playerRefExternal.current.markRemoteSync === 'function') {
+        playerRefExternal.current.markRemoteSync();
+      }
       try {
+        if (typeof playerRefExternal.current.getCurrentTime === 'function') {
+          const pt = playerRefExternal.current.getCurrentTime();
+          if (typeof pt === 'number' && pt >= 0) exactTime = pt;
+        }
         playerRefExternal.current.playVideo();
       } catch (e) {}
     }
-    onPlay(time);
+    onPlay(exactTime);
   };
 
   const handleControlsPause = (time) => {
+    let exactTime = time;
     if (playerRefExternal.current) {
+      if (typeof playerRefExternal.current.markRemoteSync === 'function') {
+        playerRefExternal.current.markRemoteSync();
+      }
       try {
+        if (typeof playerRefExternal.current.getCurrentTime === 'function') {
+          const pt = playerRefExternal.current.getCurrentTime();
+          if (typeof pt === 'number' && pt >= 0) exactTime = pt;
+        }
         playerRefExternal.current.pauseVideo();
       } catch (e) {}
     }
-    onPause(time);
+    onPause(exactTime);
   };
 
   const handleControlsSeek = (time) => {
     if (playerRefExternal.current) {
+      if (typeof playerRefExternal.current.markRemoteSync === 'function') {
+        playerRefExternal.current.markRemoteSync();
+      }
       try {
         playerRefExternal.current.seekTo(time, true);
       } catch (e) {}

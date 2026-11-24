@@ -19,6 +19,12 @@ export function useWatchParty() {
   const [incomingRequests, setIncomingRequests] = useState([]); // for host/moderator review
   const [isKicked, setIsKicked] = useState(false);
 
+  // Keep live refs for session recovery across reconnections
+  const roomRef = useRef(room);
+  roomRef.current = room;
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
   // Clear transient alert after 4 seconds
   useEffect(() => {
     if (systemAlert) {
@@ -30,6 +36,31 @@ export function useWatchParty() {
   // Set up socket event listeners
   useEffect(() => {
     if (!socket) return;
+
+    // Handle seamless reconnection / session recovery
+    const handleConnect = () => {
+      if (roomRef.current?.roomId && currentUserRef.current?.id) {
+        socket.emit('reconnect_room', {
+          roomId: roomRef.current.roomId,
+          userId: currentUserRef.current.id
+        });
+      }
+    };
+
+    socket.on('connect', handleConnect);
+
+    socket.on('room_reconnected', (data) => {
+      setCurrentUser(data.user);
+      setRoom(prev => ({
+        ...prev,
+        roomId: data.roomId,
+        hostId: data.syncState.hostId,
+        videoId: data.syncState.videoId,
+        playState: data.syncState.playState,
+        currentTime: data.syncState.currentTime
+      }));
+      setParticipants(data.participants);
+    });
 
     // Room created
     socket.on('room_created', (data) => {
@@ -274,6 +305,8 @@ export function useWatchParty() {
     });
 
     return () => {
+      socket.off('connect', handleConnect);
+      socket.off('room_reconnected');
       socket.off('room_created');
       socket.off('room_joined');
       socket.off('sync_state');

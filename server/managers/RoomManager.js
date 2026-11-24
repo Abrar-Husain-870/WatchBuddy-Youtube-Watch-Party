@@ -14,6 +14,8 @@ class RoomManager {
     this.socketToRoom = new Map();
     /** @type {Map<string, string>} Maps socketId to userId */
     this.socketToUser = new Map();
+    /** @type {Map<string, NodeJS.Timeout>} Maps userId to disconnect timeout */
+    this.disconnectTimers = new Map();
   }
 
   /**
@@ -124,6 +126,11 @@ class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
+    if (this.disconnectTimers.has(userId)) {
+      clearTimeout(this.disconnectTimers.get(userId));
+      this.disconnectTimers.delete(userId);
+    }
+
     const removedParticipant = room.removeParticipant(userId);
     let newHost = null;
     let roomDeleted = false;
@@ -149,6 +156,95 @@ class RoomManager {
       roomDeleted,
       remainingParticipants: room.getParticipantsList()
     };
+  }
+
+  /**
+   * Schedule a graceful disconnect with a 15-second grace period for reconnections.
+   * Prevents accidental host transfer or room destruction on momentary network drop.
+   * @param {string} socketId
+   * @param {Function} onTimeout
+   */
+  scheduleDisconnect(socketId, onTimeout) {
+    const roomId = this.socketToRoom.get(socketId);
+    const userId = this.socketToUser.get(socketId);
+    if (!roomId || !userId) return;
+
+    this.socketToRoom.delete(socketId);
+    this.socketToUser.delete(socketId);
+
+    if (this.disconnectTimers.has(userId)) {
+      clearTimeout(this.disconnectTimers.get(userId));
+    }
+
+    const timer = setTimeout(() => {
+      this.disconnectTimers.delete(userId);
+      const room = this.rooms.get(roomId);
+      if (!room) return;
+
+      const removedParticipant = room.removeParticipant(userId);
+      let newHost = null;
+      let roomDeleted = false;
+
+      if (room.participants.size === 0) {
+        this.rooms.delete(roomId);
+        roomDeleted = true;
+      } else if (room.hostId === userId) {
+        const remaining = Array.from(room.participants.values());
+        const nextHost = remaining.find(p => p.role === 'Moderator') || remaining[0];
+        if (nextHost) {
+          room.transferHost(nextHost.id);
+          newHost = nextHost;
+        }
+      }
+
+      if (onTimeout) {
+        onTimeout({
+          roomId,
+          participant: removedParticipant,
+          newHost,
+          roomDeleted,
+          remainingParticipants: room ? room.getParticipantsList() : []
+        });
+      }
+    }, 15000);
+
+    this.disconnectTimers.set(userId, timer);
+  }
+
+  /**
+   * Rebind a reconnected socket to their existing room session.
+   * Cancels any pending disconnect timer.
+   * @param {string} roomId
+   * @param {string} userId
+   * @param {string} newSocketId
+   * @returns {{ room: Room, participant: Participant } | null}
+   */
+  rebindSocket(roomId, userId, newSocketId) {
+    if (!roomId || !userId || !newSocketId) return null;
+    const normalizedId = roomId.toUpperCase().trim();
+    const room = this.rooms.get(normalizedId);
+    if (!room) return null;
+
+    if (this.disconnectTimers.has(userId)) {
+      clearTimeout(this.disconnectTimers.get(userId));
+      this.disconnectTimers.delete(userId);
+    }
+
+    const participant = room.getParticipant(userId);
+    if (!participant) return null;
+
+    // Remove old socket mapping if any
+    const oldSocket = participant.socketId;
+    if (oldSocket) {
+      this.socketToRoom.delete(oldSocket);
+      this.socketToUser.delete(oldSocket);
+    }
+
+    participant.socketId = newSocketId;
+    this.socketToRoom.set(newSocketId, normalizedId);
+    this.socketToUser.set(newSocketId, userId);
+
+    return { room, participant };
   }
 
   /**

@@ -419,6 +419,28 @@ function registerSocketHandlers(io) {
     });
 
     // -------------------------------------------------------------
+    // RECONNECT ROOM (Session recovery after network flicker)
+    // -------------------------------------------------------------
+    socket.on('reconnect_room', ({ roomId, userId }) => {
+      try {
+        const result = roomManager.rebindSocket(roomId, userId, socket.id);
+        if (result) {
+          const { room, participant } = result;
+          socket.join(room.roomId);
+
+          socket.emit('room_reconnected', {
+            roomId: room.roomId,
+            user: participant.toJSON(),
+            syncState: room.getSyncState(),
+            participants: room.getParticipantsList()
+          });
+        }
+      } catch (err) {
+        console.warn('reconnect_room error:', err.message);
+      }
+    });
+
+    // -------------------------------------------------------------
     // LEAVE ROOM
     // -------------------------------------------------------------
     socket.on('leave_room', () => {
@@ -437,18 +459,19 @@ function registerSocketHandlers(io) {
     });
 
     // -------------------------------------------------------------
-    // DISCONNECT
+    // DISCONNECT (With 15s grace period so temporary flickers don't drop sessions)
     // -------------------------------------------------------------
     socket.on('disconnect', () => {
-      const result = roomManager.handleDisconnect(socket.id);
-      if (result && !result.roomDeleted) {
-        io.to(result.roomId).emit('user_left', {
-          userId: result.participant.id,
-          username: result.participant.username,
-          newHost: result.newHost ? result.newHost.toJSON() : null,
-          participants: result.remainingParticipants
-        });
-      }
+      roomManager.scheduleDisconnect(socket.id, (result) => {
+        if (result && !result.roomDeleted) {
+          io.to(result.roomId).emit('user_left', {
+            userId: result.participant.id,
+            username: result.participant.username,
+            newHost: result.newHost ? result.newHost.toJSON() : null,
+            participants: result.remainingParticipants
+          });
+        }
+      });
     });
   });
 }

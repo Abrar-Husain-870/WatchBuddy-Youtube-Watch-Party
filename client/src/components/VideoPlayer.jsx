@@ -20,15 +20,72 @@ export function VideoPlayer({
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const isRemoteSyncRef = useRef(false);
+  const remoteSyncTimeoutRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
   const [needsUserGesture, setNeedsUserGesture] = useState(false);
 
-  // Sync external ref whenever player is ready
+  // Keep mutable refs for props to prevent stale closure bugs in YouTube IFrame event callbacks
+  const canControlRef = useRef(canControl);
+  canControlRef.current = canControl;
+
+  const onPlayRef = useRef(onPlay);
+  onPlayRef.current = onPlay;
+
+  const onPauseRef = useRef(onPause);
+  onPauseRef.current = onPause;
+
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  onTimeUpdateRef.current = onTimeUpdate;
+
+  // Safe remote sync marker that self-clears after 600ms so controls never get stuck
+  const markRemoteSync = useCallback(() => {
+    isRemoteSyncRef.current = true;
+    if (remoteSyncTimeoutRef.current) clearTimeout(remoteSyncTimeoutRef.current);
+    remoteSyncTimeoutRef.current = setTimeout(() => {
+      isRemoteSyncRef.current = false;
+    }, 600);
+  }, []);
+
+  // Sync external ref whenever player is ready, attaching helper for layout controls
   useEffect(() => {
     if (playerRefExternal) {
+      if (playerRef.current) {
+        playerRef.current.markRemoteSync = markRemoteSync;
+      }
       playerRefExternal.current = playerRef.current;
     }
-  }, [playerRefExternal, isReady]);
+  }, [playerRefExternal, isReady, markRemoteSync]);
+
+  // Handler ref always pointing to freshest logic
+  const handlePlayerStateChangeRef = useRef(null);
+  handlePlayerStateChangeRef.current = (event) => {
+    // If state change was caused by a remote WebSocket sync, do NOT echo back to server!
+    if (isRemoteSyncRef.current) {
+      isRemoteSyncRef.current = false;
+      if (remoteSyncTimeoutRef.current) clearTimeout(remoteSyncTimeoutRef.current);
+      return;
+    }
+
+    // Always check the current canControlRef value!
+    if (!canControlRef.current) {
+      return;
+    }
+
+    const state = event.data;
+    const playerTime =
+      playerRef.current && typeof playerRef.current.getCurrentTime === 'function'
+        ? playerRef.current.getCurrentTime()
+        : 0;
+
+    // YT.PlayerState.PLAYING = 1
+    if (state === 1) {
+      if (onPlayRef.current) onPlayRef.current(playerTime);
+    }
+    // YT.PlayerState.PAUSED = 2
+    else if (state === 2) {
+      if (onPauseRef.current) onPauseRef.current(playerTime);
+    }
+  };
 
   // Fail-safe YouTube IFrame API Initialization
   useEffect(() => {
@@ -47,7 +104,7 @@ export function VideoPlayer({
             playerVars: {
               autoplay: 0,
               controls: 1, // Full native controls for audio, fullscreen, CC
-              disablekb: canControl ? 0 : 1,
+              disablekb: 0,
               modestbranding: 1,
               rel: 0,
               enablejsapi: 1,
@@ -57,6 +114,7 @@ export function VideoPlayer({
               onReady: (event) => {
                 if (!isMounted) return;
                 setIsReady(true);
+                event.target.markRemoteSync = markRemoteSync;
                 if (playerRefExternal) playerRefExternal.current = event.target;
 
                 // Sync initial time
@@ -78,7 +136,11 @@ export function VideoPlayer({
                   }
                 }
               },
-              onStateChange: handlePlayerStateChange,
+              onStateChange: (event) => {
+                if (handlePlayerStateChangeRef.current) {
+                  handlePlayerStateChangeRef.current(event);
+                }
+              },
               onError: (err) => {
                 console.warn('YouTube Player Event Error:', err.data);
               }
@@ -120,6 +182,7 @@ export function VideoPlayer({
     return () => {
       isMounted = false;
       if (checkInterval) clearInterval(checkInterval);
+      if (remoteSyncTimeoutRef.current) clearTimeout(remoteSyncTimeoutRef.current);
       if (playerRef.current) {
         try {
           if (typeof playerRef.current.destroy === 'function') {
@@ -134,34 +197,6 @@ export function VideoPlayer({
     };
   }, []);
 
-  // State change handler triggered by user interaction or API commands
-  const handlePlayerStateChange = useCallback((event) => {
-    // If state change was caused by a remote WebSocket sync, do NOT echo back to server!
-    if (isRemoteSyncRef.current) {
-      isRemoteSyncRef.current = false;
-      return;
-    }
-
-    // Participants do NOT broadcast playback mutations to server
-    if (!canControl) {
-      return;
-    }
-
-    const state = event.data;
-    const playerTime = playerRef.current && typeof playerRef.current.getCurrentTime === 'function'
-      ? playerRef.current.getCurrentTime()
-      : 0;
-
-    // YT.PlayerState.PLAYING = 1
-    if (state === 1) {
-      onPlay(playerTime);
-    }
-    // YT.PlayerState.PAUSED = 2
-    else if (state === 2) {
-      onPause(playerTime);
-    }
-  }, [canControl, onPlay, onPause]);
-
   // Regular time and duration ticker for UI scrubber (every 500ms)
   useEffect(() => {
     const timer = setInterval(() => {
@@ -169,15 +204,15 @@ export function VideoPlayer({
         try {
           const time = playerRef.current.getCurrentTime();
           const duration = typeof playerRef.current.getDuration === 'function' ? playerRef.current.getDuration() : 0;
-          if (onTimeUpdate && typeof time === 'number') {
-            onTimeUpdate(time, duration);
+          if (onTimeUpdateRef.current && typeof time === 'number') {
+            onTimeUpdateRef.current(time, duration);
           }
         } catch (e) {}
       }
     }, 500);
 
     return () => clearInterval(timer);
-  }, [isReady, onTimeUpdate]);
+  }, [isReady]);
 
   // Handle Video ID change
   useEffect(() => {
@@ -186,7 +221,7 @@ export function VideoPlayer({
     try {
       const currentUrl = typeof playerRef.current.getVideoUrl === 'function' ? playerRef.current.getVideoUrl() : '';
       if (!currentUrl.includes(videoId)) {
-        isRemoteSyncRef.current = true;
+        markRemoteSync();
         playerRef.current.loadVideoById({
           videoId: videoId,
           startSeconds: 0
@@ -198,7 +233,7 @@ export function VideoPlayer({
     } catch (e) {
       console.warn('Error loading video by ID:', e);
     }
-  }, [videoId, isReady]);
+  }, [videoId, isReady, markRemoteSync]);
 
   // Handle Play/Pause synchronization from remote server
   useEffect(() => {
@@ -210,7 +245,7 @@ export function VideoPlayer({
         : -1;
 
       if (playState === 'playing' && currentYtState !== 1) {
-        isRemoteSyncRef.current = true;
+        markRemoteSync();
         if (typeof currentTime === 'number' && currentTime > 0 && typeof playerRef.current.seekTo === 'function') {
           playerRef.current.seekTo(currentTime, true);
         }
@@ -221,7 +256,7 @@ export function VideoPlayer({
           }
         }
       } else if (playState === 'paused' && currentYtState === 1) {
-        isRemoteSyncRef.current = true;
+        markRemoteSync();
         if (typeof playerRef.current.pauseVideo === 'function') {
           playerRef.current.pauseVideo();
         }
@@ -232,21 +267,21 @@ export function VideoPlayer({
     } catch (e) {
       console.warn('Error syncing playback state:', e);
     }
-  }, [playState, isReady]);
+  }, [playState, isReady, markRemoteSync]);
 
   // Handle explicit Seek events
   useEffect(() => {
     if (!isReady || !playerRef.current || !lastSeek) return;
 
     try {
-      isRemoteSyncRef.current = true;
+      markRemoteSync();
       if (typeof playerRef.current.seekTo === 'function') {
         playerRef.current.seekTo(lastSeek.time, true);
       }
     } catch (e) {
       console.warn('Error handling seek event:', e);
     }
-  }, [lastSeek, isReady]);
+  }, [lastSeek, isReady, markRemoteSync]);
 
   // Periodic Gentle Drift Sync (checks every 4s, corrects only if > 3s out of sync)
   useEffect(() => {
@@ -262,20 +297,20 @@ export function VideoPlayer({
 
         // Only snap if drift is significant (> 3.0s)
         if (drift > 3.0 && typeof playerRef.current.seekTo === 'function') {
-          isRemoteSyncRef.current = true;
+          markRemoteSync();
           playerRef.current.seekTo(expectedTime, true);
         }
       } catch (e) {}
     }, 4000);
 
     return () => clearInterval(driftInterval);
-  }, [isReady, playState, currentTime, lastUpdated]);
+  }, [isReady, playState, currentTime, lastUpdated, markRemoteSync]);
 
   // User gesture button to bypass browser autoplay restrictions
   const handleUserGestureStart = () => {
     setNeedsUserGesture(false);
     if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
-      isRemoteSyncRef.current = true;
+      markRemoteSync();
       try {
         playerRef.current.playVideo();
       } catch (e) {}

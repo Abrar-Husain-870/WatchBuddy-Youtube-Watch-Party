@@ -17,6 +17,8 @@ export function VideoControls({
 }) {
   const [urlInput, setUrlInput] = useState('');
   const [inputError, setInputError] = useState('');
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubValue, setScrubValue] = useState(0);
 
   const isPlaying = playState === 'playing';
 
@@ -38,26 +40,41 @@ export function VideoControls({
 
   const handleTogglePlay = () => {
     if (!canControl) return;
+    const timeToUse = isScrubbing ? scrubValue : (currentTime || 0);
     if (isPlaying) {
-      onPause(currentTime);
+      onPause(timeToUse);
     } else {
-      onPlay(currentTime);
+      onPlay(timeToUse);
     }
   };
 
   const handleQuickSeek = (secondsDelta) => {
     if (!canControl) return;
-    const newTime = Math.max(0, (currentTime || 0) + secondsDelta);
+    const base = isScrubbing ? scrubValue : (currentTime || 0);
+    const newTime = Math.max(0, Math.min(duration || 999999, base + secondsDelta));
     onSeek(newTime);
   };
 
   const handleScrubberChange = (e) => {
     if (!canControl) return;
-    const seekSeconds = Number(e.target.value);
-    onSeek(seekSeconds);
+    setScrubValue(Number(e.target.value));
   };
 
-  const maxDuration = duration > 0 ? duration : Math.max(currentTime, 100);
+  const handleScrubberStart = () => {
+    if (!canControl) return;
+    setIsScrubbing(true);
+    setScrubValue(currentTime || 0);
+  };
+
+  const handleScrubberEnd = (e) => {
+    if (!canControl) return;
+    setIsScrubbing(false);
+    const finalTime = Number(e.target.value);
+    onSeek(finalTime);
+  };
+
+  const displayTime = isScrubbing ? scrubValue : (currentTime || 0);
+  const maxDuration = duration > 0 ? duration : Math.max(displayTime, 100);
 
   return (
     <div className="bg-[#181818] border border-[#303030] rounded-xl p-3.5 space-y-3">
@@ -103,14 +120,16 @@ export function VideoControls({
           min="0"
           max={maxDuration}
           step="0.5"
-          value={currentTime || 0}
+          value={displayTime}
           disabled={!canControl}
+          onPointerDown={handleScrubberStart}
           onChange={handleScrubberChange}
+          onPointerUp={handleScrubberEnd}
           className="flex-1 accent-[#FF0033] cursor-pointer"
           title={canControl ? 'Seek position' : 'Playback synchronized by Host'}
         />
         <div className="text-xs font-mono text-[#AAAAAA] shrink-0">
-          <span className="text-[#F1F1F1] font-semibold">{formatTime(currentTime)}</span>
+          <span className="text-[#F1F1F1] font-semibold">{formatTime(displayTime)}</span>
           <span className="text-[#717171]"> / {formatTime(duration)}</span>
         </div>
       </div>
