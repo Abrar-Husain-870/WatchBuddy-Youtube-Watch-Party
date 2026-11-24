@@ -39,38 +39,60 @@ function registerSocketHandlers(io) {
     });
 
     // -------------------------------------------------------------
-    // JOIN ROOM
+    // JOIN ROOM (Creator becomes Host, subsequent joiners become Participant)
     // -------------------------------------------------------------
-    socket.on('join_room', ({ roomId, username }) => {
+    socket.on('join_room', ({ roomId, username, initialVideoId }) => {
       try {
         if (!roomId) {
           return socket.emit('error_message', { message: 'Room code is required.' });
         }
 
-        const cleanName = (username || 'Guest').trim().substring(0, 30);
-        const result = roomManager.joinRoom(roomId, cleanName, socket.id);
+        const cleanName = (username || 'User').trim().substring(0, 30);
+        const existingRoom = roomManager.getRoom(roomId);
 
-        if (!result) {
-          return socket.emit('error_message', { message: `Room "${roomId}" not found.` });
+        let room, user;
+
+        if (!existingRoom) {
+          // Room does not exist yet: First user is creator -> Auto-assign Host role
+          const created = roomManager.createRoom(cleanName, socket.id, roomId, initialVideoId);
+          room = created.room;
+          user = created.host;
+        } else {
+          // Room exists: Join as Participant
+          const joined = roomManager.joinRoom(roomId, cleanName, socket.id);
+          room = joined.room;
+          user = joined.participant;
         }
 
-        const { room, participant } = result;
         socket.join(room.roomId);
 
-        // Send welcome payload to joiner
+        // Send confirmation/welcome payload
         socket.emit('room_joined', {
           roomId: room.roomId,
-          user: participant.toJSON(),
+          user: user.toJSON(),
           syncState: room.getSyncState(),
           participants: room.getParticipantsList()
         });
+
+        // Also emit room_created if creator for backwards compatibility with our UI
+        if (user.role === 'Host') {
+          socket.emit('room_created', {
+            roomId: room.roomId,
+            user: user.toJSON(),
+            syncState: room.getSyncState(),
+            participants: room.getParticipantsList()
+          });
+        }
 
         // Send current video sync state directly to joiner
         socket.emit('sync_state', room.getSyncState());
 
         // Broadcast to existing room members that a new user joined
         socket.to(room.roomId).emit('user_joined', {
-          user: participant.toJSON(),
+          user: user.toJSON(),
+          userId: user.id,
+          username: user.username,
+          role: user.role,
           participants: room.getParticipantsList()
         });
       } catch (err) {
@@ -194,7 +216,8 @@ function registerSocketHandlers(io) {
     // -------------------------------------------------------------
     // ASSIGN ROLE (Host Only)
     // -------------------------------------------------------------
-    socket.on('assign_role', ({ targetUserId, role }) => {
+    socket.on('assign_role', ({ targetUserId, userId, role }) => {
+      const effectiveTargetId = targetUserId || userId;
       const session = roomManager.getRoomBySocket(socket.id);
       if (!session) return;
       const { room, participant } = session;
@@ -211,17 +234,17 @@ function registerSocketHandlers(io) {
         });
       }
 
-      const success = room.setRole(targetUserId, role);
+      const success = room.setRole(effectiveTargetId, role);
       if (!success) {
         return socket.emit('error_message', {
           message: 'Could not update role for the requested user.'
         });
       }
 
-      const target = room.getParticipant(targetUserId);
+      const target = room.getParticipant(effectiveTargetId);
 
       io.to(room.roomId).emit('role_assigned', {
-        userId: targetUserId,
+        userId: effectiveTargetId,
         username: target ? target.username : '',
         role: role,
         participants: room.getParticipantsList()
@@ -231,7 +254,8 @@ function registerSocketHandlers(io) {
     // -------------------------------------------------------------
     // REMOVE PARTICIPANT (Host Only)
     // -------------------------------------------------------------
-    socket.on('remove_participant', ({ targetUserId }) => {
+    socket.on('remove_participant', ({ targetUserId, userId }) => {
+      const effectiveTargetId = targetUserId || userId;
       const session = roomManager.getRoomBySocket(socket.id);
       if (!session) return;
       const { room, participant } = session;
@@ -242,19 +266,21 @@ function registerSocketHandlers(io) {
         });
       }
 
-      if (targetUserId === room.hostId) {
+      if (effectiveTargetId === room.hostId) {
         return socket.emit('error_message', {
           message: 'The Host cannot be removed from the room.'
         });
       }
 
-      const target = room.getParticipant(targetUserId);
+      const target = room.getParticipant(effectiveTargetId);
       if (!target) return;
 
-      room.removeParticipant(targetUserId);
+      room.removeParticipant(effectiveTargetId);
 
       // Notify the removed participant directly
       io.to(target.socketId).emit('participant_removed', {
+        userId: target.id,
+        participants: room.getParticipantsList(),
         message: 'You have been removed from the room by the Host.'
       });
 
@@ -264,7 +290,12 @@ function registerSocketHandlers(io) {
         targetSocket.leave(room.roomId);
       }
 
-      // Notify the remaining room participants
+      // Notify the remaining room participants (supports both participant_removed & user_left)
+      io.to(room.roomId).emit('participant_removed', {
+        userId: target.id,
+        participants: room.getParticipantsList()
+      });
+
       io.to(room.roomId).emit('user_left', {
         userId: target.id,
         username: target.username,
@@ -275,7 +306,8 @@ function registerSocketHandlers(io) {
     // -------------------------------------------------------------
     // TRANSFER HOST (Host Only)
     // -------------------------------------------------------------
-    socket.on('transfer_host', ({ targetUserId }) => {
+    socket.on('transfer_host', ({ targetUserId, userId }) => {
+      const effectiveTargetId = targetUserId || userId;
       const session = roomManager.getRoomBySocket(socket.id);
       if (!session) return;
       const { room, participant } = session;
@@ -286,17 +318,17 @@ function registerSocketHandlers(io) {
         });
       }
 
-      const success = room.transferHost(targetUserId);
+      const success = room.transferHost(effectiveTargetId);
       if (!success) {
         return socket.emit('error_message', {
           message: 'Target participant not found to transfer host role.'
         });
       }
 
-      const newHost = room.getParticipant(targetUserId);
+      const newHost = room.getParticipant(effectiveTargetId);
 
       io.to(room.roomId).emit('host_transferred', {
-        newHostId: targetUserId,
+        newHostId: effectiveTargetId,
         newHostUsername: newHost ? newHost.username : '',
         participants: room.getParticipantsList()
       });
