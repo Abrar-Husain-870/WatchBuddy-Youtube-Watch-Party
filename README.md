@@ -16,15 +16,17 @@
 ## 📋 Table of Contents
 1. [Core Features & Architecture](#-core-features--architecture)
 2. [YouTube Dark UI & Design System](#-youtube-dark-ui--design-system)
-3. [Explore Page & Randomized Viral Video Engine](#-explore-page--randomized-viral-video-engine)
-4. [Watch Parties & Dedicated Friends Section](#-watch-parties--dedicated-friends-section)
-5. [Watch Party History & Shared Room History](#-watch-party-history--shared-room-history)
-6. [Playback Synchronization & Conflict Resolution Rules](#-playback-synchronization--conflict-resolution-rules)
-7. [Tech Stack & Architecture](#-tech-stack--architecture)
-8. [WebSocket Event Protocol](#-websocket-event-protocol)
-9. [Local Development Setup](#-local-development-setup)
-10. [Production Deployment Guide (Render + Netlify)](#-production-deployment-guide-render--netlify)
-11. [Technical Interview & System Design Q&A](#-technical-interview--system-design-qa)
+3. [Host Departure Restrictions & Room Invariants](#-host-departure-restrictions--room-invariants)
+4. [Mobile Optimization & Playback Resilience](#-mobile-optimization--playback-resilience)
+5. [Explore Page & Randomized Viral Video Engine](#-explore-page--randomized-viral-video-engine)
+6. [Watch Parties & Dedicated Friends Section](#-watch-parties--dedicated-friends-section)
+7. [Watch Party History & Shared Room History](#-watch-party-history--shared-room-history)
+8. [Playback Synchronization & Conflict Resolution Rules](#-playback-synchronization--conflict-resolution-rules)
+9. [Tech Stack & Architecture](#-tech-stack--architecture)
+10. [WebSocket Event Protocol](#-websocket-event-protocol)
+11. [Local Development Setup](#-local-development-setup)
+12. [Production Deployment Guide (Render + Netlify)](#-production-deployment-guide-render--netlify)
+13. [Technical Interview & System Design Q&A](#-technical-interview--system-design-qa)
 
 ---
 
@@ -33,17 +35,25 @@
 1. **Sub-Second Real-Time Playback Synchronization**:
    - Play, pause, seek, and video changes execute in lockstep across all connected viewers.
    - Intelligent wall-clock drift compensation with a 3.0-second tolerance window and **anti-echo loop protection**.
-2. **Authentic YouTube Dark Experience**:
+2. **Strict Host Departure Restriction & Room Invariant**:
+   - **A watch party strictly cannot exist without a Host.**
+   - When a Host attempts to leave a party with active participants, an interactive **Host Departure Modal** intercepts the exit, giving the Host two explicit options: **"Transfer Host & Leave"** (select a successor from active members) or **"End Party for Everyone"** (terminates room and safely ejects all attendees).
+   - Abrupt Host disconnects with expired grace periods trigger an automatic room termination broadcast (`room_ended`).
+3. **Mobile-Optimized Responsive Player & Autoplay Resilience**:
+   - Zero blank/black video screens on mobile viewports with native `playsinline: 1` and responsive CSS 16:9 framing.
+   - Smart 800ms autoplay block detection prompting a smooth **"Tap to Watch & Listen"** overlay to unlock mobile audio policies without breaking video sync.
+   - High-resolution poster fallbacks and `referrerPolicy="no-referrer"` image delivery preventing 403 thumbnail errors.
+4. **Authentic YouTube Dark Experience**:
    - Complete redesign inspired by YouTube desktop & mobile dark theme (`#0F0F0F`, `#181818`, `#212121`, `#303030`, `#FF0033`). Zero generic purple SaaS gradients.
-3. **Dynamic Viral Video Discovery (Explore)**:
+5. **Dynamic Viral Video Discovery (Explore)**:
    - Full YouTube category list with an unpredictable Fisher-Yates randomization engine and instant shuffle.
-4. **Watch Parties & Dedicated Friends Section**:
+6. **Watch Parties & Dedicated Friends Section**:
    - Social hub tracking friend online/in-room status with 1-click room joining and "+ Add Friend" modal.
-5. **Detailed Session & Shared Video History**:
+7. **Detailed Session & Shared Video History**:
    - Comprehensive party session logs capturing who was **Admin / Host**, **Moderators**, **Participants**, and the timeline of watched videos.
-6. **Role-Based Access Control (RBAC)**:
+8. **Role-Based Access Control (RBAC)**:
    - Three distinct roles: **Host** (supreme authority), **Moderator** (playback control), and **Participant** (viewer with suggestion privileges).
-7. **Participant Suggestion Workflow**:
+9. **Participant Suggestion Workflow**:
    - Viewers can suggest videos or actions; Hosts and Moderators receive non-intrusive approval banners.
 
 ---
@@ -70,6 +80,51 @@ WatchBuddy strictly follows YouTube's dark theme design language:
   - Live WebSocket connection indicator (🟢 Connected / 🟡 Reconnecting / 🔴 Disconnected).
 - **Floating Sticky Room Banner**:
   - When in an active room, users can browse Explore, Friends, or History without disconnecting. A sleek top banner allows 1-click return to the synchronized video.
+
+---
+
+## 👑 Host Departure Restrictions & Room Invariants
+
+WatchBuddy enforces a strict architectural invariant: **A Watch Party cannot exist without a Host.**
+
+Automatic promotions on host departure have been replaced with explicit host authority transfer or graceful room termination:
+
+### 1. The Host Leave Modal (`HostLeaveModal.jsx`)
+When a Host clicks **"Leave"** while other participants or moderators are still in the party:
+- Departure is immediately intercepted by the **Host Departure Modal**.
+- The Host is presented with two explicit choices:
+  - **Option 1: "Transfer Host & Leave"**:
+    - Displays a live list of current room members with their role badges (🛡️ Moderator, 👤 Participant).
+    - Host picks a successor and clicks *Transfer Host & Leave*.
+    - The server promotes the selected member to **Host 👑**, demotes the departing host, and allows them to exit cleanly while playback continues uninterrupted for the party.
+  - **Option 2: "End Party for Everyone"**:
+    - Destructive one-click action that terminates the watch party.
+    - All connected sockets receive the `room_ended` event and are automatically ejected back to the discovery screen with a clear notification: *"The Host ended the watch party."*
+- **Cancel & Stay**: The Host can dismiss the modal at any time to remain in the party.
+
+### 2. Disconnect & Network Drop Grace Period
+- If a Host abruptly closes their tab or loses internet connection, the server initiates a **15-second grace period** (`scheduleDisconnect`).
+- If the Host reconnects within 15 seconds, their session and Host privileges are seamlessly restored (`reconnect_room`).
+- If the 15-second grace period expires without the Host reconnecting, the server marks `hostDeparted: true`, purges the room from memory, broadcasts `room_ended`, and cleans up all lingering sockets.
+
+### 3. Lone Host Departure
+- If a Host is the **only person** in the watch party (`participants.length <= 1`), clicking "Leave" exits immediately without a confirmation modal, and the empty room is safely garbage-collected.
+
+---
+
+## 📱 Mobile Optimization & Playback Resilience
+
+To guarantee a native YouTube app feel on iOS Safari and Android Chrome, WatchBuddy implements targeted mobile optimizations:
+
+1. **Inline Video Playback (`playsinline: 1`)**:
+   - Standard mobile WebKit browsers force external iframes into fullscreen or show a black placeholder. WatchBuddy configures `playsinline: 1` alongside responsive 16:9 `.video-responsive-wrapper` CSS so the video plays natively within the chat/control layout.
+2. **Mobile Autoplay Policy Handling**:
+   - Modern mobile operating systems strictly prohibit unmuted autoplay without prior direct user interaction.
+   - If an unmuted room video is blocked from playing automatically upon joining on mobile, an 800ms heartbeat detects the paused/blocked state and renders an elegant, touch-friendly **"Tap to Watch & Listen"** overlay. A single tap safely unlocks the browser's audio/video context and syncs to the room timestamp.
+3. **High-Res Poster Backdrop**:
+   - While the external YouTube IFrame initializes, an immediate high-resolution poster (`i.ytimg.com/vi/${id}/hqdefault.jpg`) renders behind the player, eliminating jarring black loading frames.
+4. **Hotlink Defense & Referrer Policy**:
+   - Thumbnail images specify `referrerPolicy="no-referrer"` to prevent 403 Forbidden responses when hotlinking YouTube video thumbnails on production Netlify domains.
 
 ---
 
@@ -197,7 +252,7 @@ Participants are governed by a 3-tier protection system:
 | **Styling & Icons** | **Tailwind CSS + Lucide Icons** | Pixel-accurate YouTube Dark design tokens with lightweight SVG icons. |
 | **Backend Runtime** | **Node.js + Express** | Lightweight HTTP server with permissive CORS and `/health` monitoring. |
 | **Real-Time Engine** | **Socket.IO 4.8** | Low-latency WebSockets with room isolation (`socket.join`), auto-reconnection, and polling fallback. |
-| **State & Store** | **In-Memory OOP Store** | Encapsulated classes (`Room`, `Participant`, `RoomManager`) with $O(1)$ Map lookups and automatic host succession. |
+| **State & Store** | **In-Memory OOP Store** | Encapsulated classes (`Room`, `Participant`, `RoomManager`) with $O(1)$ Map lookups and strict host departure lifecycle enforcement. |
 | **Video Engine** | **YouTube IFrame Player API** | Authoritative programmatic video control (`playVideo`, `pauseVideo`, `seekTo`, `loadVideoById`). |
 | **Frontend Host** | **Netlify** | Fast global CDN with client-side SPA redirect routing via `netlify.toml` and `_redirects`. |
 | **Backend Host** | **Render** | Free persistent Web Service with native WebSockets support and automatic HTTPS. |
@@ -209,21 +264,24 @@ Participants are governed by a 3-tier protection system:
 | Event Name | Direction | Payload | Role Required | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `create_room` | Client $\rightarrow$ Server | `{ username, customRoomId?, initialVideoId? }` | Anyone | Creates a room; creator becomes Host with selected initial video. |
-| `join_room` | Client $\rightarrow$ Server | `{ roomId, username }` | Anyone | Joins room as Participant. |
-| `leave_room` | Client $\rightarrow$ Server | `{}` | Room Member | Leaves room; triggers automatic host succession if host departs. |
+| `join_room` | Client $\rightarrow$ Server | `{ roomId, username }` | Anyone | Joins room (Host if creator, else Participant). |
+| `leave_room` | Client $\rightarrow$ Server | `{}` | Room Member | Leaves room. If Host departs without transferring ownership, party terminates for everyone. |
+| `end_room` | Client $\rightarrow$ Server | `{}` | Host Only | Explicitly terminates the watch party and disconnects all members. |
+| `room_ended` | Server $\rightarrow$ Clients | `{ message, roomId }` | Broadcast | Broadcast when room terminates (host left or ended party). |
 | `sync_state` | Server $\rightarrow$ Client | `{ videoId, playState, currentTime }` | Server | Authoritative state sent upon joining or reconnecting. |
 | `play` | Client $\rightarrow$ Server | `{ currentTime }` | Host / Mod | Requests room playback resume at given timestamp. |
 | `pause` | Client $\rightarrow$ Server | `{ currentTime }` | Host / Mod | Requests room playback pause at given timestamp. |
 | `seek` | Client $\rightarrow$ Server | `{ time }` | Host / Mod | Seeks playback to given timestamp for all members. |
 | `change_video` | Client $\rightarrow$ Server | `{ videoId }` | Host / Mod | Unloads current video and loads new video ID at 0:00. |
-| `assign_role` | Client $\rightarrow$ Server | `{ targetUserId, role }` | Host Only | Promotes or demotes participant. |
+| `assign_role` | Client $\rightarrow$ Server | `{ targetUserId, role }` | Host Only | Promotes or demotes participant (`Moderator` / `Participant`). |
 | `remove_participant`| Client $\rightarrow$ Server| `{ targetUserId }` | Host Only | Kicks target participant from the room. |
+| `participant_removed`| Server $\rightarrow$ Clients| `{ userId, participants, message }` | Broadcast | Notifies client and room that user was removed. |
 | `transfer_host` | Client $\rightarrow$ Server | `{ targetUserId }` | Host Only | Transfers room host ownership to target participant. |
 | `request_change` | Client $\rightarrow$ Server | `{ type, details }` | Participant | Submits video or playback suggestion for review. |
 | `approve_change` | Client $\rightarrow$ Server | `{ requestId, approved }` | Host / Mod | Approves or declines participant suggestion. |
 | `send_chat` | Client $\rightarrow$ Server | `{ message }` | Room Member | Broadcasts text chat message to room members. |
-| `user_joined` | Server $\rightarrow$ Clients | `{ user, participants }` | Broadcast | Notifies room of new member arrival. |
-| `user_left` | Server $\rightarrow$ Clients | `{ userId, username, newHost? }` | Broadcast | Notifies room of member departure and new host. |
+| `user_joined` | Server $\rightarrow$ Clients | `{ user, userId, username, role, participants }` | Broadcast | Notifies room of new member arrival. |
+| `user_left` | Server $\rightarrow$ Clients | `{ userId, username, newHost?, participants }` | Broadcast | Notifies room of member departure. |
 | `role_assigned` | Server $\rightarrow$ Clients | `{ userId, role, participants }` | Broadcast | Notifies room of updated role privileges. |
 
 ---
@@ -315,3 +373,9 @@ npm test
 
 ### 4. Why Vite + React over Next.js for this project?
 > *"Watch party applications rely 100% on client-side state: browser WebSockets, DOM iframe manipulation, and real-time canvas interactions. Next.js SSR adds hydration mismatch complexities when dealing with external iframes and introduces unnecessary server runtime costs. React + Vite compiles into pure static assets deployed globally on Netlify CDN for free, communicating directly with our persistent WebSocket server on Render."*
+
+### 5. Why enforce a strict Host Departure Restriction rather than blindly promoting a remaining participant?
+> *"In real-time collaboration systems, room ownership represents administrative accountability. Blindly auto-promoting arbitrary attendees when a creator leaves leads to 'zombie rooms' and unexpected privilege elevation. By enforcing the invariant that a watch party cannot exist without a Host, WatchBuddy empowers the room creator with explicit agency: they can deliberately designate a vetted successor via 'Transfer Host & Leave', or cleanly disband the session for everyone via 'End Party for Everyone'."*
+
+### 6. How does WatchBuddy handle mobile WebKit video playback and autoplay policy restrictions?
+> *"Mobile operating systems (iOS Safari, Android Chrome) block unmuted programmatic autoplay without a direct user gesture, and default to launching external video streams into full-screen OS media players. WatchBuddy solves this by passing `playsinline: 1` to embed the player directly into the DOM layout, and attaches an 800ms touch-unblock handshake. If playback is blocked upon entering a party, an elegant 'Tap to Watch & Listen' overlay safely unlocks the browser's audio/video context without desynchronizing the playback timeline."*
