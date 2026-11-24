@@ -20,8 +20,10 @@ import { extractYouTubeId } from '../utils/youtubeHelper';
 export function Navbar({
   room,
   currentUser,
+  participants = [],
   isConnected,
   onLeaveRoom,
+  onOpenHostLeaveModal,
   onOpenCreateModal,
   onOpenJoinModal,
   onSidebarToggle,
@@ -111,6 +113,16 @@ export function Navbar({
     navigator.clipboard.writeText(room.roomId);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleLeaveClick = () => {
+    if (currentUser?.role === 'Host' && participants && participants.length > 1) {
+      if (onOpenHostLeaveModal) {
+        onOpenHostLeaveModal();
+        return;
+      }
+    }
+    onLeaveRoom();
   };
 
   const getRoleIcon = (role) => {
@@ -322,7 +334,7 @@ export function Navbar({
 
                 {/* Leave Room Button */}
                 <button
-                  onClick={onLeaveRoom}
+                  onClick={handleLeaveClick}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#212121] hover:bg-[#272727] hover:text-[#FF4E45] text-[#AAAAAA] text-xs font-medium border border-[#303030] transition"
                   title="Leave Room"
                 >

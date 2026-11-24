@@ -85,5 +85,39 @@ assert.strictEqual(disconnectBob.roomDeleted, true, 'Room should be deleted when
 assert.strictEqual(roomManager.getRoom('TEST01'), null, 'Room should no longer exist in memory');
 console.log('✅ Test 7 Passed: Room cleaned up when all participants disconnect.\n');
 
+// Test 8: Host leaves with participants remaining (no transfer) -> room terminates for all
+console.log('Test 8: Host leaves without transfer -> Room terminates');
+const room2 = roomManager.createRoom('HostCharlie', 'socket_c1', 'TEST02');
+roomManager.joinRoom('TEST02', 'GuestDavid', 'socket_d1');
+assert.strictEqual(roomManager.getRoom('TEST02').participants.size, 2);
+
+const hostLeaveResult = roomManager.handleDisconnect('socket_c1'); // Host Charlie leaves
+assert.strictEqual(hostLeaveResult.roomDeleted, true, 'Room must be deleted when Host leaves without transfer');
+assert.strictEqual(hostLeaveResult.hostDeparted, true, 'hostDeparted must be true');
+assert.strictEqual(roomManager.getRoom('TEST02'), null, 'Room must be null in RoomManager');
+console.log('✅ Test 8 Passed: Room terminated when Host departs without transferring ownership.\n');
+
+// Test 9: Host transfers host first, then leaves -> room continues with new Host
+console.log('Test 9: Host transfers host first, then leaves -> Room continues');
+const room3 = roomManager.createRoom('HostEve', 'socket_e1', 'TEST03');
+const joinEve = roomManager.joinRoom('TEST03', 'GuestFrank', 'socket_f1');
+assert.strictEqual(roomManager.getRoom('TEST03').participants.size, 2);
+
+// Transfer host from Eve to Frank
+const transferredToFrank = room3.room.transferHost(joinEve.participant.id);
+assert.strictEqual(transferredToFrank, true);
+assert.strictEqual(room3.room.hostId, joinEve.participant.id);
+
+// Now former host Eve leaves
+const eveLeaveResult = roomManager.handleDisconnect('socket_e1');
+assert.strictEqual(eveLeaveResult.roomDeleted, false, 'Room must NOT be deleted because Eve transferred host');
+assert.strictEqual(eveLeaveResult.hostDeparted, false, 'hostDeparted must be false');
+assert.strictEqual(roomManager.getRoom('TEST03').participants.size, 1);
+assert.strictEqual(roomManager.getRoom('TEST03').hostId, joinEve.participant.id, 'Frank remains Host');
+
+// Clean up room 3
+roomManager.handleDisconnect('socket_f1');
+console.log('✅ Test 9 Passed: Room seamlessly continues when Host transfers role before leaving.\n');
+
 console.log('🎉 ALL BACKEND TESTS PASSED SUCCESSFULLY!');
 

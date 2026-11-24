@@ -473,13 +473,60 @@ function registerSocketHandlers(io) {
     });
 
     // -------------------------------------------------------------
+    // END ROOM (Host only - explicitly terminate party for everyone)
+    // -------------------------------------------------------------
+    socket.on('end_room', () => {
+      const session = roomManager.getRoomBySocket(socket.id);
+      if (!session) return;
+      const { room, participant } = session;
+
+      if (participant.role !== 'Host') {
+        return socket.emit('error_message', {
+          message: 'Permission denied: Only the Host can end the watch party.'
+        });
+      }
+
+      const roomId = room.roomId;
+      // Delete room from manager
+      roomManager.rooms.delete(roomId);
+
+      // Clean up socket mappings for this room
+      for (const p of room.participants.values()) {
+        if (p.socketId) {
+          roomManager.socketToRoom.delete(p.socketId);
+          roomManager.socketToUser.delete(p.socketId);
+          if (roomManager.disconnectTimers.has(p.id)) {
+            clearTimeout(roomManager.disconnectTimers.get(p.id));
+            roomManager.disconnectTimers.delete(p.id);
+          }
+        }
+      }
+
+      // Broadcast room_ended to everyone in the room
+      io.to(roomId).emit('room_ended', {
+        message: 'The Host ended the watch party.',
+        roomId
+      });
+
+      // Eject all sockets from socket.io room channel
+      io.in(roomId).socketsLeave(roomId);
+    });
+
+    // -------------------------------------------------------------
     // LEAVE ROOM
     // -------------------------------------------------------------
     socket.on('leave_room', () => {
       const result = roomManager.handleDisconnect(socket.id);
       if (result) {
         socket.leave(result.roomId);
-        if (!result.roomDeleted) {
+        if (result.hostDeparted) {
+          // Host departed without transferring host -> party ends for everyone
+          io.to(result.roomId).emit('room_ended', {
+            message: 'The Host has left the watch party. The party has ended.',
+            roomId: result.roomId
+          });
+          io.in(result.roomId).socketsLeave(result.roomId);
+        } else if (!result.roomDeleted) {
           io.to(result.roomId).emit('user_left', {
             userId: result.participant.id,
             username: result.participant.username,
@@ -495,13 +542,21 @@ function registerSocketHandlers(io) {
     // -------------------------------------------------------------
     socket.on('disconnect', () => {
       roomManager.scheduleDisconnect(socket.id, (result) => {
-        if (result && !result.roomDeleted) {
-          io.to(result.roomId).emit('user_left', {
-            userId: result.participant.id,
-            username: result.participant.username,
-            newHost: result.newHost ? result.newHost.toJSON() : null,
-            participants: result.remainingParticipants
-          });
+        if (result) {
+          if (result.hostDeparted) {
+            io.to(result.roomId).emit('room_ended', {
+              message: 'The Host disconnected. The watch party has ended.',
+              roomId: result.roomId
+            });
+            io.in(result.roomId).socketsLeave(result.roomId);
+          } else if (!result.roomDeleted) {
+            io.to(result.roomId).emit('user_left', {
+              userId: result.participant.id,
+              username: result.participant.username,
+              newHost: result.newHost ? result.newHost.toJSON() : null,
+              participants: result.remainingParticipants
+            });
+          }
         }
       });
     });

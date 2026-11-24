@@ -272,7 +272,22 @@ export function useWatchParty() {
       setIsKicked(true);
       setRoom(null);
       setCurrentUser(null);
+      setParticipants([]);
+      setChatMessages([]);
       setSystemAlert({ type: 'error', text: message });
+    });
+
+    // Room ended (Host left or Host terminated room)
+    socket.on('room_ended', ({ message }) => {
+      setRoom(null);
+      setCurrentUser(null);
+      setParticipants([]);
+      setChatMessages([]);
+      setIncomingRequests([]);
+      setSystemAlert({
+        type: 'warning',
+        text: message || 'The watch party has ended.'
+      });
     });
 
     // Incoming change request (for Host / Moderator)
@@ -323,6 +338,7 @@ export function useWatchParty() {
       socket.off('role_assigned');
       socket.off('host_transferred');
       socket.off('participant_removed');
+      socket.off('room_ended');
       socket.off('change_requested');
       socket.off('change_request_resolved');
       socket.off('chat_message');
@@ -385,6 +401,27 @@ export function useWatchParty() {
     socket.emit('transfer_host', { targetUserId });
   }, [socket]);
 
+  const endRoom = useCallback(() => {
+    if (!socket) return;
+    socket.emit('end_room');
+    setRoom(null);
+    setCurrentUser(null);
+    setParticipants([]);
+    setChatMessages([]);
+    setIncomingRequests([]);
+  }, [socket]);
+
+  const transferHostAndLeave = useCallback((targetUserId) => {
+    if (!socket || !targetUserId) return;
+    socket.emit('transfer_host', { targetUserId });
+    socket.emit('leave_room');
+    setRoom(null);
+    setCurrentUser(null);
+    setParticipants([]);
+    setChatMessages([]);
+    setIncomingRequests([]);
+  }, [socket]);
+
   const submitChangeRequest = useCallback((type, details) => {
     if (!socket) return;
     socket.emit('request_change', { type, details });
@@ -427,6 +464,8 @@ export function useWatchParty() {
     assignRole,
     removeParticipant,
     transferHost,
+    endRoom,
+    transferHostAndLeave,
     submitChangeRequest,
     resolveChangeRequest,
     sendChat

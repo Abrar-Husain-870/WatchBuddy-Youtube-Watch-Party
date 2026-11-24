@@ -8,6 +8,7 @@ import { ExplorePage } from './components/ExplorePage';
 import { WatchPartiesPage } from './components/WatchPartiesPage';
 import { HistoryPage } from './components/HistoryPage';
 import { RoomModal } from './components/RoomModal';
+import { HostLeaveModal } from './components/HostLeaveModal';
 import { RequestChangeModal } from './components/RequestChangeModal';
 import { Toast } from './components/Toast';
 import { extractYouTubeId } from './utils/youtubeHelper';
@@ -28,6 +29,8 @@ export default function App() {
     createRoom,
     joinRoom,
     leaveRoom,
+    endRoom,
+    transferHostAndLeave,
     sendPlay,
     sendPause,
     sendSeek,
@@ -50,6 +53,7 @@ export default function App() {
   const [modalInitialRoomCode, setModalInitialRoomCode] = useState('');
   const [modalInitialVideoId, setModalInitialVideoId] = useState(null);
   const [isSuggestModalOpen, setIsSuggestModalOpen] = useState(false);
+  const [isHostLeaveModalOpen, setIsHostLeaveModalOpen] = useState(false);
 
   // Auto-detect ?room=CODE in URL for direct shareable links
   useEffect(() => {
@@ -116,8 +120,10 @@ export default function App() {
       <Navbar
         room={room}
         currentUser={currentUser}
+        participants={participants}
         isConnected={isConnected}
         onLeaveRoom={leaveRoom}
+        onOpenHostLeaveModal={() => setIsHostLeaveModalOpen(true)}
         onOpenCreateModal={() => {
           setModalInitialVideoId(null);
           setModalInitialRoomCode('');
@@ -308,7 +314,17 @@ export default function App() {
         canControl={canControl}
       />
 
-      {/* 6. YouTube-style Toast Notifications */}
+      {/* 6. Host Departure Restriction Modal */}
+      <HostLeaveModal
+        isOpen={isHostLeaveModalOpen}
+        onClose={() => setIsHostLeaveModalOpen(false)}
+        currentUser={currentUser}
+        participants={participants}
+        onTransferAndLeave={transferHostAndLeave}
+        onEndParty={endRoom}
+      />
+
+      {/* 7. YouTube-style Toast Notifications */}
       <Toast alert={systemAlert} />
     </div>
   );

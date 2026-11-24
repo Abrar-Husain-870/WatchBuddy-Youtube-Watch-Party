@@ -134,19 +134,18 @@ class RoomManager {
     const removedParticipant = room.removeParticipant(userId);
     let newHost = null;
     let roomDeleted = false;
+    let hostDeparted = false;
 
     if (room.participants.size === 0) {
       // Room is empty, clean it up
       this.rooms.delete(roomId);
       roomDeleted = true;
     } else if (room.hostId === userId) {
-      // Host left, promote the next member (first prioritize Moderator, else first Participant)
-      const remaining = Array.from(room.participants.values());
-      const nextHost = remaining.find(p => p.role === 'Moderator') || remaining[0];
-      if (nextHost) {
-        room.transferHost(nextHost.id);
-        newHost = nextHost;
-      }
+      // Host left while others remained without transferring host!
+      // A watch party cannot exist without a Host. Terminate room for everyone.
+      this.rooms.delete(roomId);
+      roomDeleted = true;
+      hostDeparted = true;
     }
 
     return {
@@ -154,7 +153,8 @@ class RoomManager {
       participant: removedParticipant,
       newHost,
       roomDeleted,
-      remainingParticipants: room.getParticipantsList()
+      hostDeparted,
+      remainingParticipants: room ? room.getParticipantsList() : []
     };
   }
 
@@ -184,17 +184,17 @@ class RoomManager {
       const removedParticipant = room.removeParticipant(userId);
       let newHost = null;
       let roomDeleted = false;
+      let hostDeparted = false;
 
       if (room.participants.size === 0) {
         this.rooms.delete(roomId);
         roomDeleted = true;
       } else if (room.hostId === userId) {
-        const remaining = Array.from(room.participants.values());
-        const nextHost = remaining.find(p => p.role === 'Moderator') || remaining[0];
-        if (nextHost) {
-          room.transferHost(nextHost.id);
-          newHost = nextHost;
-        }
+        // Host grace period expired and host never reconnected.
+        // A watch party cannot exist without a Host. Terminate room for everyone.
+        this.rooms.delete(roomId);
+        roomDeleted = true;
+        hostDeparted = true;
       }
 
       if (onTimeout) {
@@ -203,6 +203,7 @@ class RoomManager {
           participant: removedParticipant,
           newHost,
           roomDeleted,
+          hostDeparted,
           remainingParticipants: room ? room.getParticipantsList() : []
         });
       }
