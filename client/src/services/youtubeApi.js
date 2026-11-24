@@ -32,3 +32,4 @@ export async function fetchLiveYouTubeSearch(query) {
     return searchVideos(query);
   }
 }
+
