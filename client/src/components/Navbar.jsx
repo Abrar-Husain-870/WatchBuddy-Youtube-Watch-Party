@@ -14,6 +14,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { searchVideos } from '../data/viralVideoEngine';
+import { fetchLiveYouTubeSearch } from '../services/youtubeApi';
 import { extractYouTubeId } from '../utils/youtubeHelper';
 
 export function Navbar({
@@ -34,6 +35,7 @@ export function Navbar({
   const [copiedCode, setCopiedCode] = useState(false);
 
   const searchContainerRef = useRef(null);
+  const debounceTimerRef = useRef(null);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -46,23 +48,43 @@ export function Navbar({
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
   }, []);
 
   const handleInputChange = (e) => {
     const val = e.target.value;
     setSearchInput(val);
 
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
     if (val.trim().length > 0) {
-      // If it's a URL or ID, no text suggestions needed
+      // If it's a direct URL or ID, no text suggestions needed
       if (extractYouTubeId(val)) {
         setSuggestions([]);
         setShowSuggestions(false);
-      } else {
-        const matches = searchVideos(val).slice(0, 6);
-        setSuggestions(matches);
-        setShowSuggestions(matches.length > 0);
+        return;
       }
+
+      // 1. Instant local matches
+      const localMatches = searchVideos(val).slice(0, 6);
+      if (localMatches.length > 0) {
+        setSuggestions(localMatches);
+        setShowSuggestions(true);
+      }
+
+      // 2. Debounced live YouTube query
+      debounceTimerRef.current = setTimeout(async () => {
+        try {
+          const liveResults = await fetchLiveYouTubeSearch(val.trim());
+          if (liveResults && liveResults.length > 0) {
+            setSuggestions(liveResults.slice(0, 6));
+            setShowSuggestions(true);
+          }
+        } catch (err) {}
+      }, 250);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);

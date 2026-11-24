@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const registerSocketHandlers = require('./socket/socketHandler');
 const roomManager = require('./managers/RoomManager');
+const { searchYouTube } = require('./services/youtubeSearch');
 
 const app = express();
 const server = http.createServer(app);
@@ -40,6 +41,27 @@ app.get('/health', (req, res) => {
     activeRooms: roomManager.getActiveRoomsCount(),
     timestamp: new Date().toISOString()
   });
+});
+
+// Live YouTube video search endpoint (real-time video results)
+app.get('/api/search', async (req, res) => {
+  try {
+    const query = req.query.q || '';
+    if (!query.trim()) {
+      return res.json({ success: true, count: 0, query: '', videos: [] });
+    }
+
+    const videos = await searchYouTube(query.trim(), 20);
+    res.json({
+      success: true,
+      count: videos.length,
+      query: query.trim(),
+      videos
+    });
+  } catch (err) {
+    console.error('Search endpoint error:', err);
+    res.status(500).json({ success: false, message: 'Search failed', videos: [] });
+  }
 });
 
 // Simple root info endpoint
