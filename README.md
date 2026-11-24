@@ -294,8 +294,8 @@ Participants are governed by a 3-tier protection system:
 
 ### 1. Clone & Install
 ```bash
-git clone <your-repo-url>
-cd "Watch Buddy"
+git clone https://github.com/Abrar-Husain-870/WatchBuddy-Youtube-Watch-Party.git
+cd WatchBuddy-Youtube-Watch-Party
 
 # Install server dependencies
 cd server
