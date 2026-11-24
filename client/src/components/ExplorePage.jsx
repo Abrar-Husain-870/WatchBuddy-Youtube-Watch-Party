@@ -7,17 +7,22 @@ import {
   Check,
   CheckCircle,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  Search,
+  X
 } from 'lucide-react';
 import {
   EXPLORE_CATEGORIES,
-  getRandomizedVideos
+  getRandomizedVideos,
+  searchVideos
 } from '../data/viralVideoEngine';
 
 export function ExplorePage({
   selectedCategory = 'All',
   onSelectCategory,
   onSelectVideoForParty,
+  searchQuery = '',
+  onClearSearch,
   room,
   canControl
 }) {
@@ -33,19 +38,32 @@ export function ExplorePage({
     }
   }, [selectedCategory]);
 
-  // Load fresh randomized recommendations on category change
+  // Load fresh recommendations on category change or search query change
   useEffect(() => {
-    loadFreshVideos(currentCategory);
-  }, [currentCategory]);
+    if (searchQuery && searchQuery.trim()) {
+      setIsShuffling(true);
+      setTimeout(() => {
+        const results = searchVideos(searchQuery.trim());
+        if (results.length > 0) {
+          setVideos(results);
+        } else {
+          // If no direct keyword matches, show mixed popular viral picks
+          setVideos(getRandomizedVideos('All', 12));
+        }
+        setIsShuffling(false);
+      }, 100);
+    } else {
+      loadFreshVideos(currentCategory);
+    }
+  }, [currentCategory, searchQuery]);
 
   const loadFreshVideos = (cat) => {
     setIsShuffling(true);
-    // Slight tick gives visual feedback that new dynamic viral videos were pulled
     setTimeout(() => {
       const freshList = getRandomizedVideos(cat, 16);
       setVideos(freshList);
       setIsShuffling(false);
-    }, 150);
+    }, 120);
   };
 
   const handleShuffleClick = () => {
@@ -54,6 +72,7 @@ export function ExplorePage({
 
   const handleCategoryChange = (catId) => {
     setCurrentCategory(catId);
+    if (onClearSearch) onClearSearch();
     if (onSelectCategory) {
       onSelectCategory(catId);
     }
@@ -73,14 +92,16 @@ export function ExplorePage({
         <div>
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[#FF0033]/10 border border-[#FF0033]/20 text-[#FF0033]">
-              <Compass className="w-6 h-6" />
+              {searchQuery ? <Search className="w-6 h-6" /> : <Compass className="w-6 h-6" />}
             </div>
             <div>
               <h1 className="text-2xl font-bold text-[#F1F1F1] tracking-tight">
-                Explore Viral & Trending
+                {searchQuery ? `Search: "${searchQuery}"` : 'Explore Viral & Trending'}
               </h1>
               <p className="text-xs sm:text-sm text-[#AAAAAA]">
-                Randomized viral videos across YouTube. Select a category or shuffle anytime.
+                {searchQuery
+                  ? `Showing results matching "${searchQuery}" across YouTube.`
+                  : 'Randomized viral videos across YouTube. Select a category or shuffle anytime.'}
               </p>
             </div>
           </div>
@@ -88,7 +109,7 @@ export function ExplorePage({
 
         {/* Right Controls: Category Dropdown & Shuffle Button */}
         <div className="flex items-center gap-3">
-          {/* Category Dropdown (matching user's request for dropdown selection) */}
+          {/* Category Dropdown */}
           <div className="relative">
             <select
               value={currentCategory}
@@ -117,10 +138,30 @@ export function ExplorePage({
         </div>
       </div>
 
+      {/* Active Search Filter Banner */}
+      {searchQuery && (
+        <div className="p-3 bg-[#181818] border border-[#303030] rounded-xl flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-[#F1F1F1]">
+            <Search className="w-4 h-4 text-[#FF0033]" />
+            <span>
+              Search query: <strong className="text-white font-semibold">"{searchQuery}"</strong> ({videos.length} results)
+            </span>
+          </div>
+          <button
+            onClick={onClearSearch}
+            className="px-2.5 py-1 bg-[#272727] hover:bg-[#383838] text-xs text-[#AAAAAA] hover:text-white rounded-lg transition flex items-center gap-1 border border-[#303030]"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Clear Search</span>
+          </button>
+        </div>
+      )}
+
       {/* 2. Horizontal Category Filter Chips */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
         {EXPLORE_CATEGORIES.map((cat) => {
-          const isSelected = currentCategory.toLowerCase() === cat.id.toLowerCase();
+          const isSelected =
+            !searchQuery && currentCategory.toLowerCase() === cat.id.toLowerCase();
           return (
             <button
               key={cat.id}
@@ -141,7 +182,11 @@ export function ExplorePage({
       <div className="flex items-center justify-between text-xs text-[#AAAAAA]">
         <span className="flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-[#F0B429]" />
-          Showing fresh viral picks for <strong className="text-[#F1F1F1] font-medium">{currentCategory}</strong>
+          {searchQuery ? (
+            <span>Showing results for <strong className="text-white font-medium">"{searchQuery}"</strong></span>
+          ) : (
+            <span>Showing fresh viral picks for <strong className="text-[#F1F1F1] font-medium">{currentCategory}</strong></span>
+          )}
         </span>
         <span>{videos.length} recommendations</span>
       </div>
@@ -161,7 +206,8 @@ export function ExplorePage({
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 loading="lazy"
                 onError={(e) => {
-                  e.target.src = 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=640&h=360&fit=crop';
+                  e.target.src =
+                    'https://images.unsplash.com/photo-1518770660439-4636190af475?w=640&h=360&fit=crop';
                 }}
               />
 
@@ -186,7 +232,10 @@ export function ExplorePage({
             <div className="p-3 flex flex-col flex-1 justify-between gap-3">
               <div className="flex gap-2.5">
                 <img
-                  src={video.channelAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop'}
+                  src={
+                    video.channelAvatar ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop'
+                  }
                   alt={video.channel}
                   className="w-8 h-8 rounded-full object-cover border border-[#303030] flex-shrink-0 mt-0.5"
                 />
@@ -245,4 +294,3 @@ export function ExplorePage({
     </div>
   );
 }
-

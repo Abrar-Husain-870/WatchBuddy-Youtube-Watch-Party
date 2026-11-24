@@ -1,3 +1,5 @@
+import { DISCOVERY_VIDEOS } from './discoveryVideos';
+
 /**
  * Viral Video Randomization Engine
  * Supplies randomized, unpredictable viral YouTube video recommendations
@@ -445,3 +447,33 @@ export function getRandomizedVideos(category = 'All', limit = 16) {
   const shuffled = shuffleArray(pool);
   return shuffled.slice(0, limit);
 }
+
+/**
+ * Search across all available video pools by title, channel, category, or tags.
+ * @param {string} query
+ * @returns {Array} Array of matching video objects
+ */
+export function searchVideos(query) {
+  if (!query || !query.trim()) return [];
+  const q = query.toLowerCase().trim();
+
+  const combined = [...VIRAL_VIDEOS_POOL, ...(DISCOVERY_VIDEOS || [])];
+  const seen = new Set();
+  const unique = [];
+
+  for (const item of combined) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      unique.push(item);
+    }
+  }
+
+  return unique.filter(video => {
+    const titleMatch = video.title?.toLowerCase().includes(q);
+    const channelMatch = video.channel?.toLowerCase().includes(q);
+    const categoryMatch = video.category?.toLowerCase().includes(q);
+    const tagsMatch = video.tags?.some(tag => tag.toLowerCase().includes(q));
+    return titleMatch || channelMatch || categoryMatch || tagsMatch;
+  });
+}
+

@@ -44,6 +44,7 @@ export default function App() {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'explore' | 'parties' | 'history'
   const [selectedExploreCategory, setSelectedExploreCategory] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [roomModalTab, setRoomModalTab] = useState('create'); // 'create' | 'join'
   const [modalInitialRoomCode, setModalInitialRoomCode] = useState('');
@@ -87,8 +88,9 @@ export default function App() {
     setIsRoomModalOpen(true);
   };
 
-  // Top search bar submission
+  // Top search bar submission (URLs, 11-char IDs, and keyword text search)
   const handleSearchSubmit = (query) => {
+    if (!query || !query.trim()) return;
     const extractedId = extractYouTubeId(query);
     if (extractedId) {
       if (room && canControl) {
@@ -101,6 +103,10 @@ export default function App() {
         setRoomModalTab('create');
         setIsRoomModalOpen(true);
       }
+    } else {
+      // Keyword search (e.g. "avengers", "gta", "lofi", "rock", etc.)
+      setSearchQuery(query.trim());
+      setActiveTab('explore');
     }
   };
 
@@ -125,7 +131,10 @@ export default function App() {
         }}
         onSidebarToggle={() => setSidebarExpanded(!sidebarExpanded)}
         onSearchSubmit={handleSearchSubmit}
-        onNavigateHome={() => setActiveTab('home')}
+        onNavigateHome={() => {
+          setSearchQuery('');
+          setActiveTab('home');
+        }}
         canControl={canControl}
       />
 
@@ -135,9 +144,13 @@ export default function App() {
           isExpanded={sidebarExpanded}
           onToggle={() => setSidebarExpanded(!sidebarExpanded)}
           activeTab={activeTab}
-          onTabChange={(tab) => setActiveTab(tab)}
+          onTabChange={(tab) => {
+            setSearchQuery('');
+            setActiveTab(tab);
+          }}
           selectedExploreCategory={selectedExploreCategory}
           onSelectExploreCategory={(cat) => {
+            setSearchQuery('');
             setSelectedExploreCategory(cat);
             setActiveTab('explore');
           }}
@@ -196,6 +209,8 @@ export default function App() {
               selectedCategory={selectedExploreCategory}
               onSelectCategory={setSelectedExploreCategory}
               onSelectVideoForParty={handleSelectVideoForParty}
+              searchQuery={searchQuery}
+              onClearSearch={() => setSearchQuery('')}
               room={room}
               canControl={canControl}
             />
