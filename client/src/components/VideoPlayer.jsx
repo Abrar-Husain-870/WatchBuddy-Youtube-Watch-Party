@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play } from 'lucide-react';
 
+const isMobileDevice = () => {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    ('ontouchstart' in window && window.innerWidth <= 800);
+};
+
 /**
  * YouTube Video Player Component
  * Robust IFrame API integration with fail-safe script loading and polling fallback.
@@ -59,6 +65,13 @@ export function VideoPlayer({
   // Handler ref always pointing to freshest logic
   const handlePlayerStateChangeRef = useRef(null);
   handlePlayerStateChangeRef.current = (event) => {
+    const state = event.data;
+
+    // YT.PlayerState.PLAYING = 1, BUFFERING = 3 -> dismiss gesture prompt immediately!
+    if (state === 1 || state === 3) {
+      setNeedsUserGesture(false);
+    }
+
     // If state change was caused by a remote WebSocket sync, do NOT echo back to server!
     if (isRemoteSyncRef.current) {
       isRemoteSyncRef.current = false;
@@ -66,15 +79,9 @@ export function VideoPlayer({
       return;
     }
 
-    // Always check the current canControlRef value!
+    // Always check the current canControlRef value before sending playback commands!
     if (!canControlRef.current) {
       return;
-    }
-
-    const state = event.data;
-    // When video enters playing state, dismiss any user gesture prompts
-    if (state === 1) {
-      setNeedsUserGesture(false);
     }
 
     const playerTime =
@@ -138,19 +145,21 @@ export function VideoPlayer({
                     event.target.playVideo();
                   } catch (err) {}
 
-                  // On mobile devices, check if browser autoplay policy blocked playback
-                  setTimeout(() => {
-                    if (!isMounted) return;
-                    try {
-                      const currentYtState = event.target.getPlayerState();
-                      // 1 = PLAYING, 3 = BUFFERING
-                      if (currentYtState !== 1 && currentYtState !== 3) {
+                  // Only on mobile touch devices, check if mobile browser blocked autoplay
+                  if (isMobileDevice()) {
+                    setTimeout(() => {
+                      if (!isMounted) return;
+                      try {
+                        const currentYtState = event.target.getPlayerState();
+                        // 1 = PLAYING, 3 = BUFFERING
+                        if (currentYtState !== 1 && currentYtState !== 3) {
+                          setNeedsUserGesture(true);
+                        }
+                      } catch (e) {
                         setNeedsUserGesture(true);
                       }
-                    } catch (e) {
-                      setNeedsUserGesture(true);
-                    }
-                  }, 800);
+                    }, 1200);
+                  }
                 } else {
                   // If paused on initial load, cue video so mobile displays the real poster image
                   try {
@@ -229,6 +238,13 @@ export function VideoPlayer({
     const timer = setInterval(() => {
       if (isReady && playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
         try {
+          if (typeof playerRef.current.getPlayerState === 'function') {
+            const ytState = playerRef.current.getPlayerState();
+            // If playing, ensure user gesture banner is dismissed
+            if (ytState === 1) {
+              setNeedsUserGesture(false);
+            }
+          }
           const time = playerRef.current.getCurrentTime();
           const duration = typeof playerRef.current.getDuration === 'function' ? playerRef.current.getDuration() : 0;
           if (onTimeUpdateRef.current && typeof time === 'number') {
@@ -284,16 +300,18 @@ export function VideoPlayer({
           playerRef.current.playVideo();
         }
 
-        // On mobile, if playVideo fails to transition to PLAYING/BUFFERING within 800ms, prompt user gesture
-        setTimeout(() => {
-          if (!playerRef.current) return;
-          try {
-            const state = playerRef.current.getPlayerState();
-            if (state !== 1 && state !== 3 && playState === 'playing') {
-              setNeedsUserGesture(true);
-            }
-          } catch (e) {}
-        }, 800);
+        // Only on mobile touch devices, if playVideo fails to transition within 1200ms, prompt user gesture
+        if (isMobileDevice()) {
+          setTimeout(() => {
+            if (!playerRef.current) return;
+            try {
+              const state = playerRef.current.getPlayerState();
+              if (state !== 1 && state !== 3 && playState === 'playing') {
+                setNeedsUserGesture(true);
+              }
+            } catch (e) {}
+          }, 1200);
+        }
       } else if (playState === 'paused' && currentYtState === 1) {
         markRemoteSync();
         if (typeof playerRef.current.pauseVideo === 'function') {
@@ -388,9 +406,13 @@ export function VideoPlayer({
           <div className="w-16 h-16 rounded-full bg-[#FF0033] flex items-center justify-center text-white mb-3 shadow-lg shadow-[#FF0033]/30 hover:scale-105 active:scale-95 transition">
             <Play className="w-8 h-8 fill-current ml-1" />
           </div>
-          <h3 className="text-base font-bold text-white mb-1">Tap to Watch & Listen</h3>
+          <h3 className="text-base font-bold text-white mb-1">
+            {isMobileDevice() ? 'Tap to Watch & Listen' : 'Click to Watch & Listen'}
+          </h3>
           <p className="text-xs text-[#AAAAAA] max-w-xs">
-            Mobile browsers require a tap to start video and synchronized audio.
+            {isMobileDevice()
+              ? 'Mobile browsers require a tap to start video and synchronized audio.'
+              : 'Click anywhere on the player to enable synchronized playback.'}
           </p>
         </div>
       )}
