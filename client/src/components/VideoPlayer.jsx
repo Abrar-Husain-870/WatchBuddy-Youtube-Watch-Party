@@ -291,7 +291,7 @@ export function VideoPlayer({
       try {
         if (!playerRef.current || typeof playerRef.current.getCurrentTime !== 'function') return;
         const currentLocalTime = playerRef.current.getCurrentTime();
-        const elapsedSinceLastUpdate = (Date.now() - lastUpdated) / 1000;
+        const elapsedSinceLastUpdate = Math.max(0, (Date.now() - lastUpdated) / 1000);
         const expectedTime = (currentTime || 0) + elapsedSinceLastUpdate;
         const drift = Math.abs(currentLocalTime - expectedTime);
 

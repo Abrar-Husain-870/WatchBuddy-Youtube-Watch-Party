@@ -57,7 +57,8 @@ export function useWatchParty() {
         hostId: data.syncState.hostId,
         videoId: data.syncState.videoId,
         playState: data.syncState.playState,
-        currentTime: data.syncState.currentTime
+        currentTime: data.syncState.currentTime,
+        lastUpdated: Date.now()
       }));
       setParticipants(data.participants);
     });
@@ -70,7 +71,8 @@ export function useWatchParty() {
         hostId: data.user.id,
         videoId: data.syncState.videoId,
         playState: data.syncState.playState,
-        currentTime: data.syncState.currentTime
+        currentTime: data.syncState.currentTime,
+        lastUpdated: Date.now()
       });
       setParticipants(data.participants);
       setIsKicked(false);
@@ -93,7 +95,8 @@ export function useWatchParty() {
         hostId: data.syncState.hostId,
         videoId: data.syncState.videoId,
         playState: data.syncState.playState,
-        currentTime: data.syncState.currentTime
+        currentTime: data.syncState.currentTime,
+        lastUpdated: Date.now()
       });
       setParticipants(data.participants);
       setIsKicked(false);
@@ -109,37 +112,38 @@ export function useWatchParty() {
     socket.on('sync_state', (syncState) => {
       setRoom(prev => ({
         ...prev,
-        ...syncState
+        ...syncState,
+        lastUpdated: Date.now()
       }));
     });
 
     // Real-Time Play Event (silent - no chat spam or window scrolling)
-    socket.on('play', ({ currentTime, lastUpdated }) => {
+    socket.on('play', ({ currentTime }) => {
       setRoom(prev => prev ? ({
         ...prev,
         playState: 'playing',
         currentTime: typeof currentTime === 'number' ? currentTime : prev.currentTime,
-        lastUpdated: lastUpdated || Date.now()
+        lastUpdated: Date.now()
       }) : prev);
     });
 
     // Real-Time Pause Event (silent - no chat spam or window scrolling)
-    socket.on('pause', ({ currentTime, lastUpdated }) => {
+    socket.on('pause', ({ currentTime }) => {
       setRoom(prev => prev ? ({
         ...prev,
         playState: 'paused',
         currentTime: typeof currentTime === 'number' ? currentTime : prev.currentTime,
-        lastUpdated: lastUpdated || Date.now()
+        lastUpdated: Date.now()
       }) : prev);
     });
 
     // Real-Time Seek Event (silent - no chat spam or window scrolling)
-    socket.on('seek', ({ time, lastUpdated }) => {
+    socket.on('seek', ({ time }) => {
       setRoom(prev => prev ? ({
         ...prev,
         currentTime: time,
         lastSeek: { time, timestamp: Date.now() },
-        lastUpdated: lastUpdated || Date.now()
+        lastUpdated: Date.now()
       }) : prev);
     });
 

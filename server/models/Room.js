@@ -134,13 +134,25 @@ class Room {
 
   /**
    * Returns authoritative synchronization state for clients.
+   * If playing, advances currentTime to now and resets lastUpdated to now,
+   * keeping currentTime and lastUpdated strictly aligned (eliminates double-elapsed drift offsets).
    */
   getSyncState() {
+    const now = Date.now();
+    let effective = this.currentTime;
+
+    if (this.playState === 'playing') {
+      const elapsed = (now - this.lastUpdated) / 1000;
+      effective = +(this.currentTime + elapsed).toFixed(2);
+      this.currentTime = effective;
+      this.lastUpdated = now;
+    }
+
     return {
       roomId: this.roomId,
       videoId: this.videoId,
       playState: this.playState,
-      currentTime: this.getEffectiveTime(),
+      currentTime: effective,
       lastUpdated: this.lastUpdated,
       hostId: this.hostId
     };
@@ -164,6 +176,7 @@ class Room {
       videoId: this.videoId,
       playState: this.playState,
       currentTime: this.getEffectiveTime(),
+      lastUpdated: this.lastUpdated,
       participants: this.getParticipantsList(),
       createdAt: this.createdAt
     };
