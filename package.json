@@ -1,0 +1,13 @@
+{
+  "name": "watch-buddy-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YouTube Watch Party System with Real-Time Video Sync and Role-Based Access Control",
+  "scripts": {
+    "server": "cd server && npm start",
+    "client": "cd client && npm run dev",
+    "test": "cd server && npm test",
+    "build": "cd client && npm run build"
+  }
+}
+
