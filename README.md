@@ -7,7 +7,7 @@
 
 ## 🌐 Live Deployments & Endpoints
 
-- **Frontend (Netlify)**: `https://your-watchbuddy.netlify.app` *(Configured with `netlify.toml` and `_redirects`)*
+- **Frontend (Netlify Live App)**: [https://watch-buddy.netlify.app](https://watch-buddy.netlify.app) *(Configured with `netlify.toml` and `_redirects`)*
 - **Backend (Render)**: `https://your-watchbuddy-server.onrender.com` *(Node.js WebSocket Web Service)*
 - **Health Check Endpoint**: `https://your-watchbuddy-server.onrender.com/health`
 
@@ -298,7 +298,7 @@ npm test
 4. Add the Environment Variable:
    - **Key**: `VITE_BACKEND_URL`
    - **Value**: `https://your-service.onrender.com` *(Your Render backend URL)*
-5. Deploy site. Your app will be live at `https://your-site.netlify.app`.
+5. Deploy site. Your app will be live at `https://watch-buddy.netlify.app`.
 
 ---
 
